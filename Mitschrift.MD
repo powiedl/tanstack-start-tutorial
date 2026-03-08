@@ -1,4 +1,4 @@
-# Tanstack Start (4:02:00)
+# Tanstack Start (5:01:00)
 
 Wahrscheinlich ist das ein [Repo von jemanden](https://github.com/qkransrb/tanstack-start-tutorial), der diesem Tutorial gefolgt ist (da der "echte" Sourcecode hinter einer Paywall steht)
 
@@ -195,6 +195,29 @@ Im Beispiel sieht man auch. wie man in einer Serversidefunktion ein Redirect zu 
 - **Components** - Mit Hilfe des useServerFn() Hooks (dieser wandelt den Server Function Call in einen entsprechenden API Call um, wenn es am Client läuft)
 - **andere Server Functions** - Um Server Logik in einzelne Teile zu zerlegen
 - **Event handlers ** - Um Form Submissions oder Clicks zu verarbeiten
+
+##### Parameter für eine Server Function
+
+Eine Serverfunction kann genau einen Parameter haben. Dieser ist ein Objekt und dieses muss ein Attribut `data` haben. Vor dem Aufruf des `.handler` fügt man den `.inputValidator()` Aufruf ein. Als Parameter von inputValidator kann man entweder ein zodSchema verwenden (was insbesondere praktisch ist, wenn man das gleiche Schema an anderer Stelle ebenfalls schon verwendet hat, z. b in einem Formular, in dem die entsprechenden Daten vom Benutzer eingegeben werden können). Hier ein Beispiel für ein Schema importSchema:
+
+```typescript
+export const scrapeUrlFn = createServerFn({ method: 'POST' })
+  .inputValidator(importSchema)
+  .handler(async ({ data }) => {
+    const result = await firecrawl.scrape(data.url)
+    console.log(result)
+  })
+```
+
+Hat man kein Schema (und will für diese Server Function auch keines erstellen), kann man eine entsprechende Funktion schreiben, die die Data Validierung vornimmt. Hier ein simples Beispiel für Daten, die genau ein Attribut name enthalten (vom Typ string):
+
+```typescript
+export const greetUser = createServerFn({method:'GET'})
+  .inputValidator({data: {name:string}} => data)
+  .handler(async ({data}) => {
+    return `Hello, ${data.name}`
+  });
+```
 
 #### Client-only
 
