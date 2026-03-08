@@ -14,22 +14,16 @@ import {
   useSidebar,
 } from '#/components/ui/sidebar'
 import { authClient } from '#/lib/auth-client'
+import type { NavUserProps } from '#/lib/types'
 import { useNavigate } from '@tanstack/react-router'
 import { ChevronsUpDownIcon, LogOutIcon } from 'lucide-react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
-export function NavUser({
-  user,
-}: {
-  user: {
-    name: string
-    email: string
-    avatar: string
-  }
-}) {
+export function NavUser({ user }: NavUserProps) {
   const { isMobile } = useSidebar()
   const navigate = useNavigate()
-  const { data: session, isPending } = authClient.useSession()
+
   const handleSignOut = async () => {
     await authClient.signOut({
       fetchOptions: {
@@ -54,14 +48,12 @@ export function NavUser({
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={user.avatar} alt={session?.user.name} />
-                <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                <AvatarImage src={user.image || undefined} alt={user.name} />
+                <AvatarFallback className="animate-pulse bg-gray-200 w-full h-full rounded-lg"></AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">
-                  {session?.user.name}
-                </span>
-                <span className="truncate text-xs">{session?.user.email}</span>
+                <span className="truncate font-medium">{user.name}</span>
+                <span className="truncate text-xs">{user.email}</span>
               </div>
               <ChevronsUpDownIcon className="ml-auto size-4" />
             </SidebarMenuButton>
@@ -75,8 +67,8 @@ export function NavUser({
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                  <AvatarImage src={user.image || undefined} alt={user.name} />
+                  {/* <AvatarFallback className="rounded-lg">CN</AvatarFallback> */}
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.name}</span>

@@ -1,4 +1,4 @@
-# Tanstack Start (3:10:00)
+# Tanstack Start (4:02:00)
 
 Wahrscheinlich ist das ein [Repo von jemanden](https://github.com/qkransrb/tanstack-start-tutorial), der diesem Tutorial gefolgt ist (da der "echte" Sourcecode hinter einer Paywall steht)
 
@@ -31,6 +31,16 @@ Das wird gerendert, wenn man das Root der Applikation aufruft (z. b. http://loca
 
 ```typescript
 export const Route = createFileRoute('/')({ component: App })
+```
+
+Eine Route muss dabei nicht zwingend eine Komponente enthalten (auch wenn dies nur selten "sinnvoll" ist), man kann beispielsweise das Attribut `beforeLoad` verwenden, um den User sofort wohin umzuleiten (das kann als "Abkürzung" sinnvoll sein). `beforeLoad` wird dabei - wie der Name bereits sagt - vor dem eigentlichen Loader (den wir bis jetzt noch nicht kennengelernt haben - aber das kommt in Kürze) ausgeführt.
+
+```typescript
+export const Route = createFileRoute('/dashboard/')({
+  beforeLoad: () => {
+    throw redirect({ to: '/dashboard/items' })
+  },
+})
 ```
 
 #### Eigene Routen anlegen
@@ -151,7 +161,40 @@ Es gibt verschiedene APIs mit denen man steuern kann, ob etwas nur am Client ode
 
 #### Server-only
 
+Eine Server-only Funktion läuft **immer** am Server, aber sie kann auch vom Client aus aufgerufen werden.
+
 Die `createServerFn()` wird verwendet um RPC Calls oder Data Mutations vorzunehmen. Das entsprechende Client Verhalten ist ein Netzwerkrequest zum Server. Die `createServerOnlyFn(fn)` ist für Hilfsfunktionen am Server gedacht. Wenn diese am Client aufgerufen wird, führt dies zu einem Fehler.
+
+##### Serverfunktion definieren
+
+Um eine Server-only Funktion zu definieren verwendet man `createServerFn()`. Hier ein kurzes Beispiel:
+
+```typscript
+import { auth } from '#/lib/auth'
+import { createServerFn } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
+import { redirect } from '@tanstack/react-router'
+
+export const getSessionFn = createServerFn({ method: 'GET' }).handler(
+  async () => {
+    const headers = getRequestHeaders()
+    const session = await auth.api.getSession({ headers })
+    if (!session) {
+      throw redirect({ to: '/login' })
+    }
+    return session
+  },
+)
+```
+
+Im Beispiel sieht man auch. wie man in einer Serversidefunktion ein Redirect zu einer anderen Route auszulöst, nämlich indem man die `redirect` Funktion von `@tanstack/react-router` aufruft.
+
+##### Von wo kann/soll man Server Functions aufrufen?
+
+- **Route loaders** - perfekt um Data Fetching zu machen
+- **Components** - Mit Hilfe des useServerFn() Hooks (dieser wandelt den Server Function Call in einen entsprechenden API Call um, wenn es am Client läuft)
+- **andere Server Functions** - Um Server Logik in einzelne Teile zu zerlegen
+- **Event handlers ** - Um Form Submissions oder Clicks zu verarbeiten
 
 #### Client-only
 
@@ -164,6 +207,8 @@ Für das Data Fetching verwendet man dann `loader` (bzw. im Wording von TanStack
 #### Route.useLoaderData()
 
 Die Daten, die der Route Loader zurückliefert, kann man dann in der Componente mit dem Hook `Route.useLoaderData()` tatsächlich "holen". Auch die Daten, die der Loader zurückliefert sind automatisch fully typed. `const data=Route.useLoaderData()`.
+
+Ob der Loader am Server oder am Client läuft hängt davon ab, durch welches "Ereignis" er ausgelöst wird. Bei einem Hard Refresh der Seite läuft er am Server (weil ja die gesamte Seite neu geladen wird), bei einer Clientseitigen Navigation läuft er am Client (weil der Server für den Seitenaufbau nicht involvier ist). Es ist sehr wichtig, dass man sich das vor Augen hält bzw. versteht, wo ein Loader in Abhängigkeit des "Ereignisses" tatsächlich läuft.
 
 # ShadcnUI
 
@@ -316,3 +361,11 @@ Mittels useTransition kann man u. a. einen Pending State auf der Oberfläche dar
 `const [isPending,startTransition] = useTransition();`
 
 Danach kapselt man das, was während dem isPending passiert in einen `startTransition()` aufruf. startTransition erwartet als einzigen Parameter eine Funktion (sinnvollerweise eine async Funktion, weil solange diese Funktion läuft ist der Pending State aktiv). Im JSX kann man dann mit Hilfe von isPending feststellen, ob gerade die Transition aktiv ist und die gerenderte UI entsprechend anpassen.
+
+# Eigene Ergänzungen / Änderungen
+
+## SignUp Formular
+
+Im SignUp Formular habe ich ein zusätzliches Feld für die Wiederholung des Passworts eingebaut. Außerdem habe ich das zod Schema entsprechend erweitert, dass prüft, ob beide eingegebenen Passwörter gleich sind. Zur Sicherheit habe ich im onSubmit am Anfang zusätzlich auch auf die Gleichheit der beiden Passwörter geprüft (auch wenn man "ordentlich" über die App gar nicht so weit kommen kann, dass die Kennwörter nicht übereinstimmen - weil dann ja die Validierung des zod Schemas fehlschlägt). All diese Änderungen sind in der `signup-form.tsx` Datei zu finden.
+
+Im Zuge dessen habe ich im better-Auth auch definiert, dass 3 Zeichen als Kennwort ausreichend sind (Standardwert 8). Das ist in der `lib/auth.ts` Datei zu finden.
