@@ -1,5 +1,6 @@
 import { prisma } from '#/db'
 import { firecrawl } from '#/lib/firecrawl'
+import { authFnMiddleware } from '#/middlewares/auth'
 import { extractSchema, importSchema } from '#/schemas/import'
 import { createServerFn } from '@tanstack/react-start'
 import type z from 'zod'
@@ -7,13 +8,14 @@ import type z from 'zod'
 // Test: https://www.finanzen.at/aktien/apple-aktie
 
 export const scrapeUrlFn = createServerFn({ method: 'POST' })
+  .middleware([authFnMiddleware])
   .inputValidator(importSchema)
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const item = await prisma.savedItem.create({
       data: {
         id: data.url + Date.now().toString(36),
         url: data.url,
-        userId: '3oC2uomRVsfEpeo0JWXLGTElw5DdMauo',
+        userId: context.session.user.id,
         status: 'PROCESSING',
       },
     })

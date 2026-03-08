@@ -1,4 +1,4 @@
-# Tanstack Start (5:01:00)
+# Tanstack Start (5:30:00)
 
 Wahrscheinlich ist das ein [Repo von jemanden](https://github.com/qkransrb/tanstack-start-tutorial), der diesem Tutorial gefolgt ist (da der "echte" Sourcecode hinter einer Paywall steht)
 
@@ -232,6 +232,83 @@ Für das Data Fetching verwendet man dann `loader` (bzw. im Wording von TanStack
 Die Daten, die der Route Loader zurückliefert, kann man dann in der Componente mit dem Hook `Route.useLoaderData()` tatsächlich "holen". Auch die Daten, die der Loader zurückliefert sind automatisch fully typed. `const data=Route.useLoaderData()`.
 
 Ob der Loader am Server oder am Client läuft hängt davon ab, durch welches "Ereignis" er ausgelöst wird. Bei einem Hard Refresh der Seite läuft er am Server (weil ja die gesamte Seite neu geladen wird), bei einer Clientseitigen Navigation läuft er am Client (weil der Server für den Seitenaufbau nicht involvier ist). Es ist sehr wichtig, dass man sich das vor Augen hält bzw. versteht, wo ein Loader in Abhängigkeit des "Ereignisses" tatsächlich läuft.
+
+## TanStack Start Middleware
+
+Middleware erlaubt es das Verhalten von Server Routen und Server Functions anzupassen. Sie läuft, bevor die Route oder die Server Function überhaupt startet. Oft wird sie verwendet, um Authentication und daran anschließend Authorization zu überprüfen.
+
+In TanStack Start gibt es zwei verschiedene Arten von Middleware (für spezielle Requests):
+
+- Request Middleware: Diese kann sowohl jeden Server Request, der durch diese Middleware läuft, verändern - als auch für Server Functions verwendet werden.
+- Server function middleware: Wird nur für Server functions verwendet (dafür hat diese Middleware mehr Möglichkeiten).
+
+Wie bei Middleware "üblich", kann man auch mehrere hintereinander ausführen, z. b. eine, die die Authentication überprüft, dann eine, die die Authorization überprüft (die sich sicher sein kann, dass ein authentifierter Benutzer vorhanden ist, sonst hätte die vorige Middleware einen Fehler geworfen) und am Ende dann eine die den Request (ev. mit angereicherten Daten der ersten beiden Middlewares logt).
+
+Im folgenden eine Beispielmiddleware für Server functions, die die auth Session in den Context einfügt:
+
+```typescript
+import { createMiddleware } from '@tanstack/react-start'
+import { getRequestHeaders } from '@tanstack/react-start/server'
+import { auth } from './lib/auth'
+import { redirect } from '@tanstack/react-router'
+
+export const authFnMiddleware = createMiddleware({ type: 'function' }).server(
+  async ({ next }) => {
+    const headers = getRequestHeaders()
+    const session = await auth.api.getSession({ headers })
+
+    if (!session) {
+      throw redirect({ to: '/login' })
+    }
+    return next({ context: { session } })
+  },
+)
+```
+
+Mit `createMiddleware` wird eine Middleware erzeugt - der Typ wird auf `function festgelegt`, d. h. diese Middleware ist eine Server Function Middleware. Sie holt die Session von better.Auth und ruft die next-Function (die jede Middleware als Parameter bekommt) auf und übergibt im Context die session.
+
+### Den Kontext aus der Middleware in der Server Function verwenden
+
+In der Server Function kann man dann die Middleware hinzufügen (nach `createServerFn()`) und auf den Context kann man als (weiteren) Parameter zugreifen. Hier das Beispiel von vorhin fortgesetzt:
+
+```typescript
+export const scrapeUrlFn = createServerFn({ method: 'POST' })
+  .middleware([authFnMiddleware])
+  .inputValidator(importSchema)
+  .handler(async ({ data, context }) => {
+    const item = await prisma.savedItem.create({
+      data: {
+        userId: context.session.user.id,
+        ...
+      },
+    })
+```
+
+### Middleware oder Server Function?
+
+Prinzipiell sollte man die Server Function für die Business Logik verwenden. Notwendige "Hilfsaufgaben" sollte man über Middleware realisieren. Das führt (auf lange Sicht) zu klarerem, leichter wartbaren Code. Außerdem kann man die Middleware an verschiedenen Stellen verwenden - aber das Hauptargument ist die Trennung der Aufgaben.
+
+### Globale Middleware
+
+Neben den ersten beiden Arten gibt es noch Globale Middleware. Diese läuft vor jedem einzelnen Request. Man legt diese Middleware in der Datei `/src/start.ts` fest. Diese hängt sich in den Request, bevor dieser eigentlich den Server erreicht.
+
+Hier ein einfaches Beispiel für ein simples Logging als globale Middleware:
+
+```typescript
+import { createMiddleware, createStart } from '@tanstack/react-start'
+
+const loggingMiddleware = createMiddleware().server(({ request, next }) => {
+  const url = new URL(request.url)
+  console.log(`${request.method} ${url.pathname}`)
+  return next()
+})
+
+export const startInstance = createStart(() => {
+  return {
+    requestMiddleware: [loggingMiddleware],
+  }
+})
+```
 
 # ShadcnUI
 
