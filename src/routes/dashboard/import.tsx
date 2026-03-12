@@ -13,9 +13,12 @@ import { useForm } from '@tanstack/react-form'
 import { Field } from '#/components/ui/field'
 import { createFileRoute } from '@tanstack/react-router'
 import { GlobeIcon, LinkIcon, Loader2 } from 'lucide-react'
-import { useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import { Button } from '#/components/ui/button'
-import { scrapeUrlFn } from '#/data/items'
+import { bulkScrapeUrlsFn, mapUrlFn, scrapeUrlFn } from '#/data/items'
+import { toast } from 'sonner'
+import type { SearchResultWeb } from '@mendable/firecrawl-js'
+import { Checkbox } from '#/components/ui/checkbox'
 
 export const Route = createFileRoute('/dashboard/import')({
   component: RouteComponent,
@@ -23,6 +26,42 @@ export const Route = createFileRoute('/dashboard/import')({
 
 function RouteComponent() {
   const [isPending, startTransition] = useTransition()
+  const [isBulkPending, startBulkTransition] = useTransition()
+  const [discoveredLinks, setDiscoveredLinks] = useState<
+    Array<SearchResultWeb>
+  >([])
+  const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set())
+
+  function handleSelectAll() {
+    if (selectedUrls.size === discoveredLinks.length) {
+      setSelectedUrls(new Set())
+    } else {
+      setSelectedUrls(new Set(discoveredLinks.map((link) => link.url)))
+    }
+  }
+  function handleToggleUrl(url: string) {
+    const newSelected = new Set(selectedUrls)
+    if (newSelected.has(url)) {
+      newSelected.delete(url)
+    } else {
+      newSelected.add(url)
+    }
+    setSelectedUrls(newSelected)
+  }
+
+  function handleBulkImport() {
+    startBulkTransition(async () => {
+      if (selectedUrls.size === 0) {
+        toast.error('Please select at least one Url to import')
+        return
+      }
+
+      await bulkScrapeUrlsFn({
+        data: { urls: Array.from(selectedUrls) },
+      })
+      toast.success(`Successfully imported ${selectedUrls.size} Urls`)
+    })
+  }
   const form = useForm({
     defaultValues: {
       url: '',
@@ -32,7 +71,17 @@ function RouteComponent() {
     },
     onSubmit: ({ value }) => {
       startTransition(async () => {
-        await scrapeUrlFn({ data: value })
+        try {
+          await scrapeUrlFn({ data: value })
+          toast.success('URL scraped successfully')
+        } catch (error: unknown) {
+          if (error instanceof Error) {
+            toast.error(error.message)
+          } else {
+            console.log('Error in scraping url:', JSON.stringify(error))
+            toast.error('Something went wrong scraping the URL ...')
+          }
+        }
       })
     },
   })
@@ -46,8 +95,10 @@ function RouteComponent() {
     },
     onSubmit: ({ value }) => {
       startTransition(async () => {
-        console.log('bulkForm')
-        console.log('url:', value.url, 'search:', value.search)
+        // console.log('bulkForm')
+        // console.log('url:', value.url, 'search:', value.search)
+        const data = await mapUrlFn({ data: value })
+        setDiscoveredLinks(data)
       })
     },
   })
@@ -140,7 +191,7 @@ function RouteComponent() {
                   Discover and import multiple URLs from web app! 🚀
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-6">
                 <form
                   onSubmit={(e) => {
                     e.preventDefault()
@@ -220,6 +271,66 @@ function RouteComponent() {
                     </Button>
                   </FieldGroup>
                 </form>
+                {/* Discovered URLs list */}
+                {discoveredLinks.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">
+                        Found {discoveredLinks.length} URLs
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSelectAll}
+                      >
+                        {selectedUrls.size === discoveredLinks.length
+                          ? 'Deselect All'
+                          : 'Select all'}
+                      </Button>
+                    </div>
+                    <div className="max-h-80 space-y-2 overflow-y-auto rounded-md border p-4">
+                      {discoveredLinks.map((link) => (
+                        <label
+                          key={link.url}
+                          className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-md p-2"
+                        >
+                          <Checkbox
+                            className="mt-0.5"
+                            checked={selectedUrls.has(link.url)}
+                            onCheckedChange={() => handleToggleUrl(link.url)}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">
+                              {link.title ?? 'Title has not been found'}
+                            </p>
+                            <p className="text-muted-foreground truncate text-xs">
+                              {link.description ??
+                                'Description has not been found'}
+                            </p>
+                            <p className="text-muted-foreground truncate text-xs">
+                              {link.url}
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    <Button
+                      className="w-full"
+                      onClick={handleBulkImport}
+                      disabled={isBulkPending}
+                      type="button"
+                    >
+                      {isBulkPending ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          Importing...
+                        </>
+                      ) : (
+                        `Import ${selectedUrls.size} Urls`
+                      )}
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

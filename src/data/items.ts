@@ -1,9 +1,9 @@
 import { prisma } from '#/db'
 import { firecrawl } from '#/lib/firecrawl'
 import { authFnMiddleware } from '#/middlewares/auth'
-import { extractSchema, importSchema } from '#/schemas/import'
+import { bulkImportSchema, extractSchema, importSchema } from '#/schemas/import'
 import { createServerFn } from '@tanstack/react-start'
-import type z from 'zod'
+import z from 'zod'
 
 // Test: https://www.finanzen.at/aktien/apple-aktie
 
@@ -30,9 +30,10 @@ export const scrapeUrlFn = createServerFn({ method: 'POST' })
             prompt: 'please extract the author and also publishedAt timestamp',
           },
         ],
+        location: { country: 'US', languages: ['en'] },
         onlyMainContent: true,
       })
-      console.log('result.json', result.json)
+      //console.log('result.json', result.json)
       const jsonData: z.infer<typeof extractSchema> = (result?.json as z.infer<
         typeof extractSchema
       >) || { author: null, publishedAt: null }
@@ -59,7 +60,7 @@ export const scrapeUrlFn = createServerFn({ method: 'POST' })
           status: 'COMPLETED',
         },
       })
-      console.log('After updatedItem')
+      //console.log('After updatedItem')
 
       return updatedItem
     } catch {
@@ -72,5 +73,95 @@ export const scrapeUrlFn = createServerFn({ method: 'POST' })
         },
       })
       return failedItem
+    }
+  })
+
+export const mapUrlFn = createServerFn({ method: 'POST' })
+  .middleware([authFnMiddleware])
+  .inputValidator(bulkImportSchema)
+  .handler(async ({ data }) => {
+    const result = await firecrawl.map(data.url, {
+      limit: 25,
+      search: data.search,
+      location: { country: 'US', languages: ['en'] },
+    })
+
+    return result.links
+  })
+
+export const bulkScrapeUrlsFn = createServerFn({ method: 'POST' })
+  .middleware([authFnMiddleware])
+  .inputValidator(
+    z.object({
+      urls: z.array(z.url()),
+    }),
+  )
+  .handler(async ({ data, context }) => {
+    for (let i = 0; i < data.urls.length; i++) {
+      const url = data.urls[i]
+
+      const item = await prisma.savedItem.create({
+        data: {
+          id: url + Date.now().toString(36),
+          url: url,
+          userId: context.session.user.id,
+          status: 'PENDING',
+        },
+      })
+
+      try {
+        const result = await firecrawl.scrape(url, {
+          formats: [
+            'markdown',
+            {
+              type: 'json',
+              //schema: extractSchema // zod v4 is currently not supported by firecrawl
+              prompt:
+                'please extract the author and also publishedAt timestamp',
+            },
+          ],
+          location: { country: 'US', languages: ['en'] },
+          onlyMainContent: true,
+        })
+        //console.log('result.json', result.json)
+        const jsonData: z.infer<typeof extractSchema> =
+          (result?.json as z.infer<typeof extractSchema>) || {
+            author: null,
+            publishedAt: null,
+          }
+        let publishedAt = null
+
+        if (jsonData.publishedAt) {
+          const parsed = new Date(jsonData.publishedAt)
+
+          if (!isNaN(parsed.getTime())) {
+            publishedAt = parsed
+          }
+        }
+
+        await prisma.savedItem.update({
+          where: {
+            id: item.id,
+          },
+          data: {
+            title: result.metadata?.title || null,
+            content: result.markdown || null,
+            ogImage: result.metadata?.ogImage || null,
+            author: jsonData?.author || null,
+            publishedAt: publishedAt,
+            status: 'COMPLETED',
+          },
+        })
+        //console.log('After updatedItem')
+      } catch {
+        await prisma.savedItem.update({
+          where: {
+            id: item.id,
+          },
+          data: {
+            status: 'FAILED',
+          },
+        })
+      }
     }
   })

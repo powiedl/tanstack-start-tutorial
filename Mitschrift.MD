@@ -1,4 +1,4 @@
-# Tanstack Start (5:30:00)
+# Tanstack Start (6:19:00)
 
 Wahrscheinlich ist das ein [Repo von jemanden](https://github.com/qkransrb/tanstack-start-tutorial), der diesem Tutorial gefolgt ist (da der "echte" Sourcecode hinter einer Paywall steht)
 
