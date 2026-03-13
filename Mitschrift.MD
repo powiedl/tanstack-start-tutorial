@@ -1,4 +1,4 @@
-# Tanstack Start (6:19:00)
+# Tanstack Start (7:06:00)
 
 Wahrscheinlich ist das ein [Repo von jemanden](https://github.com/qkransrb/tanstack-start-tutorial), der diesem Tutorial gefolgt ist (da der "echte" Sourcecode hinter einer Paywall steht)
 
@@ -129,6 +129,10 @@ In der Link Komponente muss man das dann auch noch verwenden (die Zeile `activeP
 </Link>
 ```
 
+### Programmatische Navigation
+
+Die `Link` Komponente ist die richtige Wahl, wenn man ein UI Element rendern will, auf das der Benutzer klicken kann, um wohinzunavigieren. Will man hingegen aus dem Code wohin navigieren, ist der `useNavigate` Hook das richtige. Er liefert eine navigate Funktion zurück. Diese kann man mit einem Parameter aufrufen. Dieser Parameter ist ein Objekt, dass das Attribut to hat. Darin übergibt man, wohin man navigieren will. useNavigate hat einen optionalen Parameter, der ebenfalls ein Objekt ist. Darin kann man beispielsweise ein `from` (von wo aus navigiert man) angeben. Das ist hilfreich, wenn man searchParams verarbeiten will (in dem Fall muss man nämlich from auf Route.fullPath setzen, womit die Route typesafe wird): `const navigate=useNavigate({from: Route.fullPath})`
+
 ## TanStack Start Data fetching
 
 In TanStack Start kann man sowohl am Client als auch am Server Data fetchen. Wenn man Daten am Client fetcht, führt das zu zusätzlichen Verzögerungen, weil zuerst der Request an den Server geschickt wird, der das HTML aufbaut - mit allen Informationen, die er "vorrätig" hat und dieses HTML dann an den Client zurückschickt. Der Client führt dann die Hydration durch, was bedeutet, dass er den Javascript-Teil hinzufügt bzw. ausführt. Wenn im Javascript Teil weitere Daten von einer API (z. b. Datenbank) geladen werden, führt das zu zusätzlichen Pending States und wenn diese "aufgelöst" werden ändert sich die UI (die neuen Daten werden an den "richtigen" Stellen eingefügt). Daher sollte man - wenn möglich - das Data fetching bereits am Server erledigen.
@@ -232,6 +236,42 @@ Für das Data Fetching verwendet man dann `loader` (bzw. im Wording von TanStack
 Die Daten, die der Route Loader zurückliefert, kann man dann in der Componente mit dem Hook `Route.useLoaderData()` tatsächlich "holen". Auch die Daten, die der Loader zurückliefert sind automatisch fully typed. `const data=Route.useLoaderData()`.
 
 Ob der Loader am Server oder am Client läuft hängt davon ab, durch welches "Ereignis" er ausgelöst wird. Bei einem Hard Refresh der Seite läuft er am Server (weil ja die gesamte Seite neu geladen wird), bei einer Clientseitigen Navigation läuft er am Client (weil der Server für den Seitenaufbau nicht involvier ist). Es ist sehr wichtig, dass man sich das vor Augen hält bzw. versteht, wo ein Loader in Abhängigkeit des "Ereignisses" tatsächlich läuft.
+
+## SearchParams
+
+TanStack Start unterstützt SearchParams. SearchParams kann man als globalen State betrachten, weil sie einen hard refresh überleben und wenn man den gleichen Link wieder öffnet, sollte die Applikation "gleich" aussehen. Die Implementierung von TanStack Start ist dabei der nativen URLSearchParams vorzuziehen, weil erstere typesafe ist.
+
+Außerdem werden TanStack Start SearchParams in JSON konvertiert - damit kann man alles, was sich als JSON serialisieren lässt, in den SearchParams verwenden.
+
+### Validierung
+
+Nachdem die SearchParams etwas sind, worauf der User direkt Einfluss nehmen kann (weil er die Url "manipulieren" kann), ist es wesentlich die SearchParams, bevor man mit ihnen arbeitet entsprechend zu Validieren. TanStack Start unterstützt das "out of the box", beispielsweise mit einem entsprechenden zod Schema.
+
+```typescript
+import { zodValidator } from '@tanstack/zod-adapter'
+import { z } from 'zod'
+
+// das Schema für die SearchParams als zod Schema definieren
+const itemsSearchSchema = z.object({
+  q: z.string().default(''),
+  status: z.union([z.literal('all'), z.nativeEnum(ItemStatus)]).default('all'),
+})
+
+export const Route = createFileRoute('/dashboard/items/')({
+  component: RouteComponent,
+  loader: () => getItemsFn(),
+  validateSearch: zodValidator(itemsSearchSchema), // hier sagt man, dass man das itemsSearchSchema für die Validierung der searchParams verwenden will
+})
+```
+
+### Verwendung in der Komponente
+
+Dazu gibt es den `useSearch`-Hook:
+
+```typescript
+function RouteComponent() {
+  const { q, status } = Route.useSearch()
+```
 
 ## TanStack Start Middleware
 
