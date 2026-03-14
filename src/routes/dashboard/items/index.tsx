@@ -16,7 +16,7 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { CopyIcon, Inbox } from 'lucide-react'
 import z from 'zod'
 import { zodValidator } from '@tanstack/zod-adapter'
-import { useEffect, useState } from 'react'
+import { Suspense, use, useEffect, useState } from 'react'
 import {
   Empty,
   EmptyContent,
@@ -25,6 +25,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '#/components/ui/empty'
+import { Skeleton } from '#/components/ui/skeleton'
 
 const itemsSearchSchema = z.object({
   q: z.string().default(''),
@@ -33,10 +34,30 @@ const itemsSearchSchema = z.object({
 type ItemsSearch = z.infer<typeof itemsSearchSchema>
 export const Route = createFileRoute('/dashboard/items/')({
   component: RouteComponent,
-  loader: () => getItemsFn(),
+  //loader: () => getItemsFn(), // so wartet der Loader, bis das Promise von getItemsFn() aufgelöst wird
+  loader: () => ({ itemsPromise: getItemsFn() }), // so liefert die Route sofort das Promise der getItemsFn zurück - man muss am Client daher nicht warten
   validateSearch: zodValidator(itemsSearchSchema),
 })
 
+function ItemsGridSkeleton() {
+  return (
+    <div className="grid gap-6 md:grid-cols-2">
+      {[1, 2, 3, 4].map((i) => (
+        <Card key={i} className="overflow-hidden pt-0 animate-pulse">
+          <Skeleton className="aspect-video w-full" />
+          <CardHeader className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-5 w 20 rounded-full" />
+              <Skeleton className="size-8 rounded-md" />
+            </div>
+            <Skeleton className="h-6 w-full" />
+            <Skeleton className="h-4 w-40" />
+          </CardHeader>
+        </Card>
+      ))}
+    </div>
+  )
+}
 function ItemsList({
   q,
   status,
@@ -44,9 +65,10 @@ function ItemsList({
 }: {
   q: ItemsSearch['q']
   status: ItemsSearch['status']
-  data: Awaited<ReturnType<typeof getItemsFn>>
+  data: ReturnType<typeof getItemsFn>
 }) {
-  const filteredItems = data.filter((item) => {
+  const items = use(data)
+  const filteredItems = items.filter((item) => {
     const matchesQuery =
       q === '' || // der User hat kein Suchquery angegen
       item.title?.toLowerCase().includes(q.toLowerCase()) || // enthält der Titel den Suchquery?
@@ -62,15 +84,15 @@ function ItemsList({
             <Inbox className="size-12" />
           </EmptyMedia>
           <EmptyTitle>
-            {data.length === 0 ? 'No Items saved yet' : 'No items found'}
+            {items.length === 0 ? 'No Items saved yet' : 'No items found'}
           </EmptyTitle>
           <EmptyDescription>
-            {data.length === 0
+            {items.length === 0
               ? 'Import a Url to get started with saving your content'
               : 'No items match your current query'}
           </EmptyDescription>
         </EmptyHeader>
-        {data.length === 0 && (
+        {items.length === 0 && (
           <EmptyContent>
             <Link className={buttonVariants()} to="/dashboard/import">
               Import URL
@@ -133,7 +155,7 @@ function ItemsList({
   )
 }
 function RouteComponent() {
-  const data = Route.useLoaderData()
+  const { itemsPromise } = Route.useLoaderData()
   const { q, status } = Route.useSearch()
   const [searchInput, setSearchInput] = useState(q)
   const navigate = useNavigate({ from: Route.fullPath })
@@ -146,6 +168,7 @@ function RouteComponent() {
 
     return () => clearTimeout(timeoutId)
   }, [searchInput, navigate, q])
+  console.log('itemsPromise:', itemsPromise)
 
   return (
     <div className="flex flex-1 flex-col gap-6">
@@ -191,8 +214,9 @@ function RouteComponent() {
           </SelectContent>
         </Select>
       </div>
-
-      <ItemsList q={q} status={status} data={data} />
+      <Suspense fallback={<ItemsGridSkeleton />}>
+        <ItemsList q={q} status={status} data={itemsPromise} />
+      </Suspense>
     </div>
   )
 }

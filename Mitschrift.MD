@@ -1,4 +1,4 @@
-# Tanstack Start (7:23:00)
+# Tanstack Start (7:44:00)
 
 Wahrscheinlich ist das ein [Repo von jemanden](https://github.com/qkransrb/tanstack-start-tutorial), der diesem Tutorial gefolgt ist (da der "echte" Sourcecode hinter einer Paywall steht)
 
@@ -236,6 +236,49 @@ Für das Data Fetching verwendet man dann `loader` (bzw. im Wording von TanStack
 Die Daten, die der Route Loader zurückliefert, kann man dann in der Componente mit dem Hook `Route.useLoaderData()` tatsächlich "holen". Auch die Daten, die der Loader zurückliefert sind automatisch fully typed. `const data=Route.useLoaderData()`.
 
 Ob der Loader am Server oder am Client läuft hängt davon ab, durch welches "Ereignis" er ausgelöst wird. Bei einem Hard Refresh der Seite läuft er am Server (weil ja die gesamte Seite neu geladen wird), bei einer Clientseitigen Navigation läuft er am Client (weil der Server für den Seitenaufbau nicht involvier ist). Es ist sehr wichtig, dass man sich das vor Augen hält bzw. versteht, wo ein Loader in Abhängigkeit des "Ereignisses" tatsächlich läuft.
+
+#### Suspend Data Loading (Streaming) - in TanStack (Router / Start) nennt man das Deferred Data Loading
+
+In TanStack Start bzw. Router prüft der Loader, ob er ein Promise erhält oder nicht. Wenn er ein Promise erhält, wartet er, bis dieses Promise resolved wird. Wenn er kein Promise erhält, gibt er das was er erhält sofort an die Komponente weiter. Damit kann man beim Loader leicht steuern, ob man eine "blocking" Route (der Loader wartet, bis das Promise resolved wird) oder eine "non-blocking" Route (der Loader gibt das Resultat sofort weiter) realisiert.
+
+Aus `loader: () => getItemsFn()` wird `loader: () => ({itemsPromise: getItemsFn()})`.
+
+Dadurch gibt der Loader sofort ein Objekt zurück, dass ein Attribut itemsPromise - der Attributname ist egal - enthält, dass das Promise von getItemsFn() ist. Er gibt dieses Objekt als `LoaderData` an die Komponente (wo es mit `useLoaderData()` ausgelesen werden kann). In der Komponente, muss man dann dafür sorgen, dass man den Teil, der auf itemsPromise beruht, erst rendert, wenn das Promise resolved ist.
+
+##### Anpassung in der Komponente
+
+In der Komponente sind jetzt ebenfalls ein paar Änderungen notwendig (weil die ja jetzt zuerst ein Promise bekommt und erst später - vielleicht - die Daten).
+
+Dazu gibt es den `use` Hook von React, mit dem man ein Promise oder Context verwenden kann. Außerdem muss man zwei Komponenten verwenden. Die Parent Komponente enthält den `Route.useLoaderData()` Aufruf (wo wahrscheinlich ein Promise geliefert wird) und die zweite Komponente wird innerhalb eines `<Suspense></Suspense>` gewrappt. In dieser zweiten wird dann der `use` Hook verwendet.
+
+Hier ein Beispiel mit den relevanten Codeteilen:
+
+```typescript
+// Parent Komponente
+function RouteComponent() {
+  const { itemsPromise } = Route.useLoaderData()
+  ...
+  return (
+    ...
+    <Suspense>
+      <ItemsList data={itemsPromise} />
+    </Suspense>
+    ...
+  )
+}
+
+// Child Komponente
+function ItemsList({data}:{items:ReturnType<typeof getItemsF>}) {
+  const items=use(data);
+  return (
+    {items.map((item) => <p>{item.title}</p>
+  )
+}
+```
+
+Wenn man unbedingt alles in einer Komponente machen will, kann man innerhalb des `Suspense` die `Await` Komponente verwenden. Diese hat das Prop `promise` (wo man das Promise, das man von `useLoaderData()` erhalten hat, übergibt). Innerhalb der Await Komponente ist dann das promise bereits resolved, d. h. man spart sich in diesem Fall den `use` Hook.
+
+Die Suspense Komponente hat ein optionales Prop `fallback`. Da kann man ein JSX (oder eine andere Komponente) angeben, das gerendert wird, solange auf die Daten gewartet wird, z. b. ein Skeleton oder als "Minimum" ein `<p>Loading...</p> (damit der User weiß, dass da noch was kommt).
 
 ## SearchParams
 

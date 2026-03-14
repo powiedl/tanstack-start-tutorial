@@ -1,5 +1,6 @@
 import { prisma } from '#/db'
 import { firecrawl } from '#/lib/firecrawl'
+import { sleep } from '#/lib/utils'
 import { authFnMiddleware } from '#/middlewares/auth'
 import { bulkImportSchema, extractSchema, importSchema } from '#/schemas/import'
 import { createServerFn } from '@tanstack/react-start'
@@ -169,6 +170,7 @@ export const bulkScrapeUrlsFn = createServerFn({ method: 'POST' })
 export const getItemsFn = createServerFn({ method: 'GET' })
   .middleware([authFnMiddleware])
   .handler(async ({ context }) => {
+    await sleep(1000)
     const items = await prisma.savedItem.findMany({
       where: {
         userId: context.session.user.id,
