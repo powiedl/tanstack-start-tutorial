@@ -37,6 +37,14 @@ export const Route = createFileRoute('/dashboard/items/')({
   //loader: () => getItemsFn(), // so wartet der Loader, bis das Promise von getItemsFn() aufgelöst wird
   loader: () => ({ itemsPromise: getItemsFn() }), // so liefert die Route sofort das Promise der getItemsFn zurück - man muss am Client daher nicht warten
   validateSearch: zodValidator(itemsSearchSchema),
+  head: () => ({
+    meta: [
+      {
+        title: 'Saved Items',
+      },
+      { property: 'og:title', content: 'Saved Items' },
+    ],
+  }),
 })
 
 function ItemsGridSkeleton() {

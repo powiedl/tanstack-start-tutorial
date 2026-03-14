@@ -1,4 +1,4 @@
-# Tanstack Start (8:13:00)
+# Tanstack Start (8:22:00)
 
 Wahrscheinlich ist das ein [Repo von jemanden](https://github.com/qkransrb/tanstack-start-tutorial), der diesem Tutorial gefolgt ist (da der "echte" Sourcecode hinter einer Paywall steht)
 
@@ -391,6 +391,77 @@ export const startInstance = createStart(() => {
     requestMiddleware: [loggingMiddleware],
   }
 })
+```
+
+## Die Head Komponente managen
+
+Das ist u. a. wichtig für Search Engine Optimization. TanStack Start bietet dafür gute Möglichkeiten. Damit das funktioniert muss sowohl die `<Head />` als auch die `<Scripts />` Komponente gerendert werden. Das macht man meist im Root Layout (in `__root.tsx`).
+
+Die eigentlichen "Werte"/"Attribute definiert man im `createRootRoute` im Attribut `head` - wobei das eine Funktion ist, die die Attribute zurückliefert, z. b. `charset`, `title`, ...
+
+```typescript
+export const Route = createRootRoute({
+  head: () => ({
+    meta: [
+      {
+        charSet: 'utf-8',
+      },
+      {
+        name: 'viewport',
+        content: 'width=device-width, initial-scale=1',
+      },
+      {
+        title: 'TanStack Start Starter',
+      },
+    ],
+    links: [
+      {
+        rel: 'stylesheet',
+        href: appCss,
+      },
+    ],
+  }),
+  shellComponent: RootDocument,
+})
+
+function RootDocument({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        ...
+        <TanStackDevtools
+          config={{
+            position: 'bottom-right',
+          }}
+          plugins={[
+            {
+              name: 'Tanstack Router',
+              render: <TanStackRouterDevtoolsPanel />,
+            },
+          ]}
+        />
+        <Scripts />
+      </body>
+    </html>
+  )
+}
+```
+
+Die Informationen, die man in der Root Route angibt, werden auch an alle Childrouten vererbt - können dort aber im `createFileRoute` überschrieben werden. Dabei muss es sich nicht nur um statische Informationen handeln, sondern man kann beispielsweise auch auf die Daten des Loaders zurückgreifen (im Beispiel wird der title aus den LoaderData als Titel für die aktuelle Seite verwendet).
+
+```typescript
+export const Route = createFileRoute('/dashboard/items/')({
+  ...
+  head: ({ loaderData }) => ({
+    meta: [
+      {
+        title: loaderData?.title ?? 'Item Details',
+      },
+    ],
+  }),
 ```
 
 # ShadcnUI

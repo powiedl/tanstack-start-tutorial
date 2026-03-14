@@ -23,6 +23,17 @@ import { MessageResponse } from '#/components/ai-elements/message'
 export const Route = createFileRoute('/dashboard/items/$itemId')({
   component: RouteComponent,
   loader: ({ params }) => getItemById({ data: { id: params.itemId } }),
+  head: ({ loaderData }) => ({
+    meta: [
+      {
+        title: loaderData?.title ?? 'Item Details',
+      },
+      {
+        property: 'og:image',
+        content: loaderData?.ogImage ?? 'here we should add a fallback image',
+      },
+    ],
+  }),
 })
 
 function RouteComponent() {
