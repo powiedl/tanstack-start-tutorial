@@ -42,7 +42,6 @@ export function ThemeProvider({
         ? (localStorage.getItem(storageKey) as Theme)
         : null) || defaultTheme,
   )
-
   const handleMediaQuery = useCallback(
     (e: MediaQueryListEvent | MediaQueryList) => {
       if (theme !== 'system') return

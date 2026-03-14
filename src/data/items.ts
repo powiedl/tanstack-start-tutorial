@@ -4,6 +4,7 @@ import { sleep } from '#/lib/utils'
 import { authFnMiddleware } from '#/middlewares/auth'
 import { bulkImportSchema, extractSchema, importSchema } from '#/schemas/import'
 import { createServerFn } from '@tanstack/react-start'
+import { notFound } from '@tanstack/react-router'
 import z from 'zod'
 
 // Test: https://www.finanzen.at/aktien/apple-aktie
@@ -170,7 +171,7 @@ export const bulkScrapeUrlsFn = createServerFn({ method: 'POST' })
 export const getItemsFn = createServerFn({ method: 'GET' })
   .middleware([authFnMiddleware])
   .handler(async ({ context }) => {
-    await sleep(1000)
+    await sleep(10) // Parameter auf 2000 setzen, wenn man eine langsame Api simulieren will
     const items = await prisma.savedItem.findMany({
       where: {
         userId: context.session.user.id,
@@ -180,4 +181,18 @@ export const getItemsFn = createServerFn({ method: 'GET' })
       },
     })
     return items
+  })
+
+export const getItemById = createServerFn({ method: 'GET' })
+  .middleware([authFnMiddleware])
+  .inputValidator(z.object({ id: z.string() }))
+  .handler(async ({ context, data }) => {
+    const item = await prisma.savedItem.findUnique({
+      where: {
+        userId: context.session.user.id,
+        id: data.id,
+      },
+    })
+    if (!item) throw notFound()
+    return item
   })

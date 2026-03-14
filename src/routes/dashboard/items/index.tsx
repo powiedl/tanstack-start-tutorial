@@ -108,7 +108,11 @@ function ItemsList({
           key={item.id}
           className="group overflow-hidden transistion-all hover:shadow-lg pt-0"
         >
-          <Link to="/dashboard" className="block">
+          <Link
+            to="/dashboard/items/$itemId"
+            params={{ itemId: item.id }}
+            className="block"
+          >
             {item.ogImage && (
               <div className="aspect-video w-full overflow-hidden bg-muted">
                 <img
@@ -168,7 +172,7 @@ function RouteComponent() {
 
     return () => clearTimeout(timeoutId)
   }, [searchInput, navigate, q])
-  console.log('itemsPromise:', itemsPromise)
+  //console.log('itemsPromise:', itemsPromise)
 
   return (
     <div className="flex flex-1 flex-col gap-6">
