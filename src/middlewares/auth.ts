@@ -18,8 +18,11 @@ export const authFnMiddleware = createMiddleware({ type: 'function' }).server(
 export const authMiddleware = createMiddleware({ type: 'request' }).server(
   async ({ next, request }) => {
     const url = new URL(request.url)
-
-    if (!url.pathname.startsWith('/dashboard')) {
+    if (url.pathname.startsWith('/api/ai/scrape')) return next()
+    if (
+      !url.pathname.startsWith('/dashboard') &&
+      !url.pathname.startsWith('/api')
+    ) {
       return next()
     }
     const headers = getRequestHeaders()

@@ -1,15 +1,17 @@
 import { Button, buttonVariants } from '#/components/ui/button'
-import { getItemById } from '#/data/items'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { getItemById, saveSummaryAndGenerateTagsFn } from '#/data/items'
+import { createFileRoute, Link, useRouter } from '@tanstack/react-router'
 import {
   ArrowLeft,
-  Badge,
   Calendar,
   ChevronDown,
   Clock,
   ExternalLink,
+  Loader2,
+  Sparkles,
   User,
 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import {
   Collapsible,
   CollapsibleContent,
@@ -19,6 +21,8 @@ import { cn } from '#/lib/utils'
 import { Card, CardContent } from '#/components/ui/card'
 import { useState } from 'react'
 import { MessageResponse } from '#/components/ai-elements/message'
+import { useCompletion } from '@ai-sdk/react'
+import { toast } from 'sonner'
 
 export const Route = createFileRoute('/dashboard/items/$itemId')({
   component: RouteComponent,
@@ -38,8 +42,33 @@ export const Route = createFileRoute('/dashboard/items/$itemId')({
 
 function RouteComponent() {
   const data = Route.useLoaderData()
-  const [contentOpen, setContentOpen] = useState(false)
+  const router = useRouter()
+  const { completion, complete, isLoading } = useCompletion({
+    api: '/api/ai/summary',
+    streamProtocol: 'text',
+    body: { itemId: data.id },
+    initialCompletion: data.summary || undefined,
+    onFinish: async (_prompt, completionText) => {
+      await saveSummaryAndGenerateTagsFn({
+        data: { id: data.id, summary: completionText },
+      })
+      toast.success('Summary generated and saved')
+      router.invalidate()
+    },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
 
+  function handleGenerateSummary() {
+    if (!data.content) {
+      toast.error('No content available to summarize')
+      return
+    }
+
+    complete(data.content)
+  }
+  const [contentOpen, setContentOpen] = useState(false)
   return (
     <div className="mx-auto max-w-3xl space-y-6 w-full">
       <div className="flex justify-start">
@@ -98,12 +127,50 @@ function RouteComponent() {
         {data.tags.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {data.tags.map((tag) => (
-              <Badge>{tag}</Badge>
+              <Badge key={tag}>{tag}</Badge>
             ))}
           </div>
         )}
         {/* Summary */}
-        <p>This is for the summary</p>
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-primary mb-3">
+                  Summary
+                </h2>
+                {completion || data.summary ? (
+                  <MessageResponse>{completion}</MessageResponse>
+                ) : (
+                  <p className="text-muted-foreground italic">
+                    {data.content
+                      ? 'No summary yet. Generate one with ai'
+                      : 'No content available to summarize'}
+                  </p>
+                )}
+              </div>
+              {data.content && !data.summary && (
+                <Button
+                  size="sm"
+                  disabled={isLoading}
+                  onClick={handleGenerateSummary}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Generating
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="size-4 mr-2" />
+                      Generate
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Content Section */}
         {data.content && (

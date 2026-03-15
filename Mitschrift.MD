@@ -1,4 +1,4 @@
-# Tanstack Start (8:22:00)
+# Tanstack Start (9:07:00)
 
 Wahrscheinlich ist das ein [Repo von jemanden](https://github.com/qkransrb/tanstack-start-tutorial), der diesem Tutorial gefolgt ist (da der "echte" Sourcecode hinter einer Paywall steht)
 
@@ -393,6 +393,28 @@ export const startInstance = createStart(() => {
 })
 ```
 
+## API Endpoint
+
+Obwohl man eine Server function als API Endpoint betrachten kann, gibt es auch dezidierte API Endpoints. Die Server function wird (von der Idee) innerhalb der Applikation aufgerufen (obwohl technisch nichts verhindert, dass sie beispielsweise durch ein curl aufgerufen wird). Ein API Endpoint ist dafür gedacht, dass er "von überall" aus aufgerufen werden kann und darf.
+
+Ein API Endpoint wird - wie eine normale Route in dem entsprechenden `/src/routes` File im `createFileRoute` definiert. Dazu gibt man dem zurückgelieferten Objekt ein Attribut `server`, in dem man dann die `handlers` festlegt. Wenn man kein Attribut `component` zurückliefert, handelt es sich nur um einen API Endpoint. Man kann aber innerhalb einer `createFileRoute` auch sowohl das Attribut `server` und `component` zurückliefern (in diesem Fall darf der API Endpoint nur keinen handler für GET haben).
+
+Hier ein Beispiel für einen API Endpoint (man hat im Handler Zugriff auf den Request, den Context ... wie bei jeder anderen Route auch). Im Beispiel wird davon ausgegangen, dass der User authentifiziert ist (dies kann beispielsweise durch eine globale middleware sichergestellt werden - da diese vor **jedem** Request laufen, also auch vor einem API Endpoint) und dass in der Session user.name exisitiert (womit der User persönlich begrüsst wird):
+
+```typescript
+import { createFileRoute } from '@tanstack/react-router'
+
+export const Route = createFileRoute('/api/ai/summary')({
+  server: {
+    handlers: {
+      GET: async ({ request, context }) => {
+        return new Response(`Hello ${context.session.user.name}!`)
+      },
+    },
+  },
+})
+```
+
 ## Die Head Komponente managen
 
 Das ist u. a. wichtig für Search Engine Optimization. TanStack Start bietet dafür gute Möglichkeiten. Damit das funktioniert muss sowohl die `<Head />` als auch die `<Scripts />` Komponente gerendert werden. Das macht man meist im Root Layout (in `__root.tsx`).
@@ -623,3 +645,91 @@ Danach kapselt man das, was während dem isPending passiert in einen `startTrans
 Im SignUp Formular habe ich ein zusätzliches Feld für die Wiederholung des Passworts eingebaut. Außerdem habe ich das zod Schema entsprechend erweitert, dass prüft, ob beide eingegebenen Passwörter gleich sind. Zur Sicherheit habe ich im onSubmit am Anfang zusätzlich auch auf die Gleichheit der beiden Passwörter geprüft (auch wenn man "ordentlich" über die App gar nicht so weit kommen kann, dass die Kennwörter nicht übereinstimmen - weil dann ja die Validierung des zod Schemas fehlschlägt). All diese Änderungen sind in der `signup-form.tsx` Datei zu finden.
 
 Im Zuge dessen habe ich im better-Auth auch definiert, dass 3 Zeichen als Kennwort ausreichend sind (Standardwert 8). Das ist in der `lib/auth.ts` Datei zu finden.
+
+# AI SDK
+
+Ist ein Opensource Toolkit für Typescript um mit LLMs zu interagieren. Für die eigentliche Interaktion mit den LLMs wird auch noch ein AI Gateway benötigt. AI SDK bietet eines an - allerdings muss man dafür eine Kreditkarte hinterlegen.
+
+## OpenRouter (als LLM Gateway)
+
+Daher wird in diesem Tutorial statt dessen OpenRouter als LLM Gateway verwendet. Dort kann man bei der Anlage eines API Keys ein Limit angeben (auch 0$) - wobei man gar keine Kreditkarte hinterlegen muss.
+
+## Einrichten OpenRouter für AI SDK
+
+Die AI SDK Homepage enthält eine genaue [Anleitung](https://ai-sdk.dev/providers/community-providers/openrouter#openrouter), wie man den OpenRouter in das AI SDK einbindet. Man muss den Provider installieren, dann die Provider Instanz einrichten.
+
+## Summarize Article
+
+### API Endpoint
+
+Hier der gesamte Code für die Summarize Article API Function:
+
+```typescript
+import { prisma } from '#/db'
+import { openrouter } from '#/lib/openrouter'
+import { createFileRoute } from '@tanstack/react-router'
+import { streamText } from 'ai'
+
+export const Route = createFileRoute('/api/ai/summary')({
+  server: {
+    handlers: {
+      POST: async ({ request, context }) => {
+        const { itemId, prompt } = await request.json()
+        if (!itemId || !prompt) {
+          return new Response('Missing prompt or itemId', { status: 400 })
+        }
+        const item = await prisma.savedItem.findUnique({
+          where: {
+            id: itemId,
+            userId: context?.session.user.id,
+          },
+        })
+        if (!item) {
+          return new Response('Item not found', { status: 404 })
+        }
+
+        // stream summary
+        const result = streamText({
+          model: openrouter.chat('z-ai/glm-4.5-air:free'),
+          system: `You are a helpful assistant that creates concise, informative summaries of web content.
+            Your summaries should:
+            - Be 2-3 paragraphs long
+            - Capture the main points and key takeaways
+            - Be written in a clear, professional tone`,
+          prompt: `Please summarize the following content:\n\n${prompt}`,
+        })
+
+        // Return the stream in the format useCompletion expects
+        return result.toTextStreamResponse()
+      },
+    },
+  },
+})
+```
+
+#### Erklärung des Codes
+
+Zuerst wird geprüft, ob alle notwendigen Parameter - `itemId` und `prompt` (das wird der zusammenzufassende Artikel sein) vorhanden sind. Anschließend wird geprüft, ob es ein entsprechendes Item in der Datenbank gibt (und dieses dem aktuellen Benutzer gehört - dazu wird der context, den die authMiddleware hinzufügt, verwendet). Abschließende wird die Funktion `streamText` vom AI SDK aufgerufen (das angegebene Modell ist ein free Model, d. h. für die Benutzung fallen keine Kosten an).
+
+Am Ende wird das Ergebnis zum Client gestreamt (in einer Form, die der useCompletion Hook erwartet).
+
+### Frontend Komponente (auszugsweise)
+
+Im folgenden die relevanten Teile der Komponente, für das Darstellen der AI Summary. Wie im vorigen Abschnitt erwähnt, wollen wir den `useCompletion` Hook (vom AI SDK) verwenden.
+
+```typescript
+import { useCompletion } from '@ai-sdk/react'
+...
+function RouteComponent() {
+  const data = Route.useLoaderData()
+  const {completion,complete,isLoading} = useCompletion({
+    api: '/api/ai/summary',
+    streamProtocol: 'text',
+    body: { itemId: data.id },
+    onError: (error) => {
+      toast.error(error.message)
+    },
+  })
+```
+
+`completion` ist das "Ergebnis" bzw. der Stream mit der Summary. `complete` ist die Funktion, die man aufruft, damit das AI Modell tatsächlich seine Arbeit macht (eben die Zusammenfassung generiert). Und `isLoading` ist der Status, woran man erkennen kann, ob die Erzeugung der summary bereits abgeschlossen ist oder noch andauert.
