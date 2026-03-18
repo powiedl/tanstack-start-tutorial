@@ -2,8 +2,6 @@
 
 Wahrscheinlich ist das ein [Repo von jemanden](https://github.com/qkransrb/tanstack-start-tutorial), der diesem Tutorial gefolgt ist (da der "echte" Sourcecode hinter einer Paywall steht)
 
-Testuser: tim@tom.io, abc
-
 ## offene Todos
 
 - den Return der /api/ai/summary auswerten und das Ergebnis an den User zurückmelden
