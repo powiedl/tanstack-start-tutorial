@@ -15,10 +15,16 @@ import { createFileRoute } from '@tanstack/react-router'
 import { GlobeIcon, LinkIcon, Loader2 } from 'lucide-react'
 import { useState, useTransition } from 'react'
 import { Button } from '#/components/ui/button'
-import { bulkScrapeUrlsFn, mapUrlFn, scrapeUrlFn } from '#/data/items'
+import {
+  bulkScrapeUrlsFn,
+  mapUrlFn,
+  scrapeUrlFn,
+  type BulkScrapeProgress,
+} from '#/data/items'
 import { toast } from 'sonner'
 import type { SearchResultWeb } from '@mendable/firecrawl-js'
 import { Checkbox } from '#/components/ui/checkbox'
+import { Progress } from '#/components/ui/progress'
 
 export const Route = createFileRoute('/dashboard/import')({
   component: RouteComponent,
@@ -31,6 +37,7 @@ function RouteComponent() {
     Array<SearchResultWeb>
   >([])
   const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set())
+  const [progress, setProgress] = useState<BulkScrapeProgress | null>(null)
 
   function handleSelectAll() {
     if (selectedUrls.size === discoveredLinks.length) {
@@ -56,10 +63,40 @@ function RouteComponent() {
         return
       }
 
-      await bulkScrapeUrlsFn({
-        data: { urls: Array.from(selectedUrls) },
+      let successCount = 0
+      let failedCount = 0
+      setProgress({
+        completed: 0,
+        total: selectedUrls.size,
+        url: '',
+        status: 'success',
       })
-      toast.success(`Successfully imported ${selectedUrls.size} Urls`)
+
+      // await bulkScrapeUrlsFn({
+      //   data: { urls: Array.from(selectedUrls) },
+      // })
+
+      for await (const update of await bulkScrapeUrlsFn({
+        data: { urls: Array.from(selectedUrls) },
+      })) {
+        setProgress(update)
+        if (update.status === 'success') {
+          successCount++
+        } else {
+          failedCount++
+        }
+      }
+
+      setProgress(null)
+      if (failedCount > 0) {
+        if (successCount > 0) {
+          toast.success(`Imported ${successCount} Urls (${failedCount} failed)`)
+        } else {
+          toast.error(`Import of all ${failedCount} Urls failed`)
+        }
+      } else {
+        toast.success(`Imported all ${successCount} Urls successfully`)
+      }
     })
   }
   const form = useForm({
@@ -259,11 +296,30 @@ function RouteComponent() {
                         )
                       }}
                     />
+
+                    {progress && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Importing: {progress.completed} / {progress.total}
+                          </span>
+                          <span className="font-medium">
+                            {Math.round(progress.completed / progress.total) *
+                              100}
+                          </span>
+                        </div>
+                        <Progress
+                          value={(progress.completed / progress.total) * 100}
+                        />
+                      </div>
+                    )}
                     <Button type="submit" disabled={isPending}>
                       {isPending ? (
                         <>
                           <Loader2 className="size-4 animate-spin" />
-                          'Processing'
+                          {progress
+                            ? `Importing ${progress.completed}/${progress.total}...`
+                            : 'Starting'}
                         </>
                       ) : (
                         'Import URLs'

@@ -1,8 +1,72 @@
-# Tanstack Start (9:07:00)
+# Tanstack Start Tutorial (9:30:00)
 
 Wahrscheinlich ist das ein [Repo von jemanden](https://github.com/qkransrb/tanstack-start-tutorial), der diesem Tutorial gefolgt ist (da der "echte" Sourcecode hinter einer Paywall steht)
 
 Testuser: tim@tom.io, abc
+
+## offene Todos
+
+- den Return der /api/ai/summary auswerten und das Ergebnis an den User zurückmelden
+- Möglichkeiten für den Ersatz von firecrawl suchen
+
+# Versuch ein "eigenes" LLM für das Webscrapen zu finden
+
+LLM für das Umwandeln von HTML zu Markdown: jina-reader (es gibt verschiedene Modelle - keines ist auf OpenRouter verfügbar).
+
+Ich habe - in einem ersten Versuch - das "Qwen3Coder-Next-UD" Modell mit einem Kontextfenster von 80000 Token (abhängig von der Seite die ich scrapen will - wobei das schon ans Limit von meinem Computer geht) verwendet.
+
+Als Prompt habe ich folgendes verwendet:
+
+```
+Konvertiere das folgende HTML in Markdown. Beachte besonders diese Regeln:
+- Bleibe dabei so nahe am HTML wie das mit Markdown möglich ist.
+- Bilder sollen als Links im Markdown erhalten bleiben.
+- Links sollen als Links im Markdown erhalben bleiben.
+- Am Anfang füge eine Sektion metadaten ein (diese soll den Titel der Seite, und wenn du es feststellen kannst das Veröffentlichungsdatum und den Autor enthalten).
+- Der eigentliche Inhalt soll daran anschließen - die Sektion soll content heißen.
+
+<!DOCTYPE HTML> <html lang="en"> <head>...
+```
+
+Nach dem ersten Durchlauf - der wirklich lange (über eine Stunde für [IBM Granite 4.0 Announcement](https://www.ibm.com/new/announcements/ibm-granite-4-0-hyper-efficient-high-performance-hybrid-models) gebraucht hat, würde ich folgende Anpassungen vornehmen:
+
+```
+Konvertiere das folgende HTML in Markdown. Beachte besonders diese Regeln:
+- Der gesamte Markdown soll in einem Code-Block stehen, so dass man ihn leicht kopieren kann.
+- Bleibe dabei so nahe am HTML wie das mit Markdown möglich ist.
+- Behalte die Originalsprache bei (englische Seite --> englisches Markdown, deutsche Seite --> deutsches Markdown)
+- Bilder sollen als Links im Markdown erhalten bleiben.
+- Links sollen als Links im Markdown erhalben bleiben.
+- Am Anfang füge eine Sektion metadaten ein (diese soll den Titel der Seite, und wenn du es feststellen kannst das Veröffentlichungsdatum und den Autor enthalten).
+- Der eigentliche Inhalt soll daran anschließen - die Sektion soll content heißen.
+
+<!DOCTYPE HTML> <html lang="en"> <head>...
+```
+
+Ich habe es dann mit dem Modell `Jinaai Reader Lm 1.5B Gguf Q8_0` versucht. Das war wesentlich schneller, hat aber inhaltlich komplett versagt.
+
+Dann habe ich es mit dem Modell `ReaderLM-v2-i1` probiert. Das ging ebenfalls recht schnell und hat den Markdown sehr genau erstellt - allerdings hat es die Anweisung für die metadata Section komplett ignoriert.
+
+Ich habe diesen Prompt verwendet:
+
+```
+Rolle: Du bist ein Experte für Web-Entwicklung und Dokumentations-Strukturierung.
+Aufgabe: Konvertiere den folgenden HTML-Code präzise in sauberes GitHub Flavored Markdown (GFM).
+Regeln:
+- Beginne dein Markdown mit einer Sektion metadata. In dieser gib den Titel und wenn du es feststellen kannst den Autor und das Veröffentlichungsdatum an.
+- Danach mach eine Sektion Content. In dieser soll eigentliche Inhalt des HTML in Markdown enthalten sein. Bleibe bei der Konvertierung so nahe am HTML Original wie möglich. Behalte vor allem auch die Sprache der Seite bei (englisch bleibt englisch, deutsch bleibt deutsch, …)- Erhalte die gesamte Hierarchie (H1-H6).
+- Wandle Tabellen korrekt in Markdown-Tabellen um.
+- Extrahiere Links im Format [Text](URL).
+- Ignoriere <script> und <style> Tags sowie unnötige <div>-Container.
+- Gib nur das Markdown-Ergebnis aus, ohne Einleitung oder abschließende Erklärungen.
+
+HTML Input:
+...
+```
+
+Recht schnell, allerdings geht die Struktur komplett verloren und die Metadata Sektion existiert ebenfalls nicht.
+
+# TanStack Start
 
 ## Tanstack Start "Komponenten"
 
@@ -221,6 +285,42 @@ export const greetUser = createServerFn({method:'GET'})
   .handler(async ({data}) => {
     return `Hello, ${data.name}`
   });
+```
+
+#### Data Streaming von Server Functions
+
+Insbesondere seit AI vermehrt in Applikationen Einzug hält, ist es "üblich", dass bei längerdauernden Tasks Updates über den Taskfortschritt in der UI dargestellt werden. Wenn der betreffende Task in einer einzigen Server Function abgehandelt wird, kann man in TanStack Start 2 verschiedene Strategien verfolgen um dieses Ziel zu erreichen: `ReadableStream` oder `async Generatoren` (für beides findet man ein Beispiel auf der [offiziellen TanStack Start Dokumentation](https://tanstack.com/start/latest/docs/framework/react/guide/streaming-data-from-server-functions)).
+
+Hier werden `async Generatoren` verwendet, weil es der klarere Ansatz ist.
+
+Dazu muss man die `.handler` Funktion als "normale" Funktion schreiben (es darf keine Arrow-Funktion sein), weil man nach dem Schlüsselwort `function` einen `*` hinzufügen muss, z. b. `.handler(async ({ data, context }) => {` wird zu `.handler(async function* ({ data, context })  {`. Durch den `*` wird die Funktion eben zu einer Generator Funktion. Diese läuft nicht einmal durch und liefert am Ende ihr Ergebnis, sondern sie kann ihren Ablauf "unterbrechen" und später an genau der Stelle wieder fortsetzen.
+
+Wenn man so eine Funktion aufruft, wird sie nicht direkt ausgeführt, sondern liefert ein Generator-Objekt (einen `Iterator`) zurück, mit dem man die Ausführung entsprechend Schritt für Schritt steuern kann. Man kann sich das in der Funktion `bulkScrapeUrlsFn` ansehen.
+
+Hier ein einfacheres Beispiel aus der TanStack Start Dokumentation:
+
+```typescript
+const streamingWithAnAsyncGeneratorFn = createServerFn().handler(
+  async function* () {
+    const messages: Message[] = generateMessages()
+    for (const msg of messages) {
+      await sleep(500)
+      // The streamed chunks are still typed as `Message`
+      yield msg
+    }
+  },
+)
+```
+
+Und hier ein dazu passender Clientteil (in `src/routes/dashboard/discover.tsx` kann man sich "unseren" Clientteil ansehen):
+
+```typescript
+const getResponseFromTheAsyncGenerator = useCallback(async () => {
+  for await (const msg of await streamingWithAnAsyncGeneratorFn()) {
+    const chunk = msg.content
+    setMessages((prev) => prev + chunk)
+  }
+}, [])
 ```
 
 #### Client-only

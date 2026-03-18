@@ -2,12 +2,18 @@ import { prisma } from '#/db'
 import { firecrawl } from '#/lib/firecrawl'
 import { sleep } from '#/lib/utils'
 import { authFnMiddleware } from '#/middlewares/auth'
-import { bulkImportSchema, extractSchema, importSchema } from '#/schemas/import'
+import {
+  bulkImportSchema,
+  extractSchema,
+  importSchema,
+  searchSchema,
+} from '#/schemas/import'
 import { createServerFn } from '@tanstack/react-start'
 import { notFound } from '@tanstack/react-router'
 import z from 'zod'
 import { generateText } from 'ai'
 import { openrouter } from '#/lib/openrouter'
+import type { SearchResultWeb } from '@mendable/firecrawl-js'
 
 // Test: https://www.finanzen.at/aktien/apple-aktie
 
@@ -100,7 +106,9 @@ export const bulkScrapeUrlsFn = createServerFn({ method: 'POST' })
       urls: z.array(z.url()),
     }),
   )
-  .handler(async ({ data, context }) => {
+  .handler(async function* ({ data, context }) {
+    const total = data.urls.length
+
     for (let i = 0; i < data.urls.length; i++) {
       const url = data.urls[i]
 
@@ -113,6 +121,7 @@ export const bulkScrapeUrlsFn = createServerFn({ method: 'POST' })
         },
       })
 
+      let status: BulkScrapeProgress['status'] = 'success'
       try {
         const result = await firecrawl.scrape(url, {
           formats: [
@@ -158,6 +167,7 @@ export const bulkScrapeUrlsFn = createServerFn({ method: 'POST' })
         })
         //console.log('After updatedItem')
       } catch {
+        status = 'failed'
         await prisma.savedItem.update({
           where: {
             id: item.id,
@@ -167,6 +177,15 @@ export const bulkScrapeUrlsFn = createServerFn({ method: 'POST' })
           },
         })
       }
+
+      const progress: BulkScrapeProgress = {
+        completed: i + 1,
+        total,
+        url,
+        status,
+      }
+
+      yield progress
     }
   })
 
@@ -243,4 +262,27 @@ export const saveSummaryAndGenerateTagsFn = createServerFn({ method: 'POST' })
       },
     })
     return item
+  })
+
+export type BulkScrapeProgress = {
+  completed: number
+  total: number
+  url: string
+  status: 'success' | 'failed'
+}
+
+export const searchWebFn = createServerFn({ method: 'POST' })
+  .middleware([authFnMiddleware])
+  .inputValidator(searchSchema)
+  .handler(async ({ data }) => {
+    const result = await firecrawl.search(data.query, {
+      limit: 10,
+      tbs: 'qdr:y',
+    })
+
+    return result.web?.map((item) => ({
+      url: (item as SearchResultWeb).url,
+      title: (item as SearchResultWeb).title,
+      description: (item as SearchResultWeb).description,
+    })) as SearchResultWeb[]
   })

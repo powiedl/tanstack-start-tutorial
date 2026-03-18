@@ -14,7 +14,7 @@ export const Route = createFileRoute('/api/ai/scrape')({
         }
 
         const { data: htmlContent } = await axios.get(url)
-        console.log(`Content von ${url}:`, htmlContent)
+        //console.log(`Content von ${url}:`, htmlContent)
 
         // stream summary
         const result = streamText({

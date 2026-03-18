@@ -1,6 +1,11 @@
 import { Badge } from '#/components/ui/badge'
 import { Button, buttonVariants } from '#/components/ui/button'
-import { Card, CardHeader, CardTitle } from '#/components/ui/card'
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '#/components/ui/card'
 import { Input } from '#/components/ui/input'
 import {
   Select,
@@ -121,15 +126,17 @@ function ItemsList({
             params={{ itemId: item.id }}
             className="block"
           >
-            {item.ogImage && (
-              <div className="aspect-video w-full overflow-hidden bg-muted">
+            <div className="aspect-video w-full overflow-hidden bg-muted">
+              {item.ogImage ? (
                 <img
                   src={item.ogImage}
                   alt={item.title ?? 'Article Thumbnail'}
                   className="h-full w-full object-cover group-hover:scale-105"
                 />
-              </div>
-            )}
+              ) : (
+                <div className="h-full w-full object-cover group-hover:scale-105 bg-linear-to-br from-rose-300 to-red-500"></div>
+              )}
+            </div>
             <CardHeader className="space-y-3 pt-4">
               <div className="flex items-center justify-between gap-2">
                 <Badge
@@ -158,6 +165,21 @@ function ItemsList({
               </CardTitle>
               {item.author && (
                 <p className="text-xs text-muted-foreground">{item.author}</p>
+              )}
+              {item.summary && (
+                <CardDescription className="line-clamp-3 text-sm">
+                  {item.summary}
+                </CardDescription>
+              )}
+
+              {item.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 5 pt-2">
+                  {item.tags.slice(0, 4).map((tag, index) => (
+                    <Badge variant="secondary" key={index}>
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
               )}
             </CardHeader>
           </Link>
